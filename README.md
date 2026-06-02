@@ -202,6 +202,10 @@ Docker Registry 删除 manifest 后，通常还需要仓库侧执行 garbage col
 - 如果给多人使用，建议放在内网，并增加 HTTPS、用户鉴权、审计日志和 CSRF 防护。
 - 登录凭据只保存在当前 Python 进程内存中，不会写入本地文件。
 
+## AI-Assisted Development
+
+This project was designed, implemented, documented, and polished with the assistance of OpenAI Codex (GPT-5.5), under the author's direction and review.
+
 ## Contact
 
 - Author: tangguo95
