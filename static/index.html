@@ -1,0 +1,155 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Docker Remote Manage</title>
+    <link rel="stylesheet" href="/static/styles.css" />
+  </head>
+  <body>
+    <main class="shell">
+      <section class="login-view" id="loginView" hidden>
+        <div class="brand-panel">
+          <p class="eyebrow">Registry Console</p>
+          <h1>Docker 远程镜像<br />仓库管理</h1>
+          <p class="intro">连接 Registry V2 兼容仓库，查看镜像、浏览 tag，并执行删除操作。</p>
+          <div class="signal-grid" aria-hidden="true">
+            <span></span><span></span><span></span><span></span><span></span><span></span>
+          </div>
+        </div>
+
+        <form class="login-card" id="loginForm">
+          <div class="form-head">
+            <p class="eyebrow">Connection</p>
+            <h2>连接仓库</h2>
+          </div>
+          <label>
+            <span>仓库地址</span>
+            <input id="registryInput" name="registry" type="text" autocomplete="url" placeholder="https://registry.example.com" required />
+          </label>
+          <label>
+            <span>用户名</span>
+            <input id="usernameInput" name="username" type="text" autocomplete="username" placeholder="可留空" />
+          </label>
+          <label>
+            <span>密码</span>
+            <input id="passwordInput" name="password" type="password" autocomplete="current-password" placeholder="可留空" />
+          </label>
+          <label>
+            <span>仓库前缀</span>
+            <input id="repositoryPrefixInput" name="repositoryPrefix" type="text" placeholder="可选，如 project-a/team-b" />
+          </label>
+          <label class="check-row">
+            <input id="insecureInput" name="insecure" type="checkbox" />
+            <span>允许自签名证书</span>
+          </label>
+          <button class="primary-btn" id="loginButton" type="submit">登录</button>
+          <p class="form-message" id="loginMessage" role="status"></p>
+        </form>
+      </section>
+
+      <section class="dashboard" id="dashboardView" hidden>
+        <aside class="rail">
+          <div class="rail-brand">
+            <strong>DRM</strong>
+            <span>Registry Console</span>
+          </div>
+          <div class="connection-card">
+            <span class="muted">当前仓库</span>
+            <strong id="currentRegistry">-</strong>
+            <span id="currentUser">-</span>
+            <span id="currentScope">全部镜像</span>
+          </div>
+          <form class="scope-card" id="scopeForm">
+            <label>
+              <span>镜像范围</span>
+              <input id="scopeInput" type="text" placeholder="全部，或输入项目/命名空间" />
+            </label>
+            <div class="scope-actions">
+              <button class="tool-btn" id="applyScopeButton" type="submit">应用</button>
+              <button class="ghost-btn" id="clearScopeButton" type="button">全部</button>
+            </div>
+          </form>
+          <button class="ghost-btn" id="logoutButton" type="button">退出登录</button>
+        </aside>
+
+        <div class="workspace">
+          <header class="topbar">
+            <div>
+              <p class="eyebrow">Inventory</p>
+              <h1>镜像仓库</h1>
+            </div>
+            <div class="toolbar">
+              <button class="tool-btn" id="refreshCatalogButton" type="button">刷新仓库</button>
+            </div>
+          </header>
+
+          <div class="notice" id="globalNotice" hidden></div>
+
+          <section class="storage-summary" aria-label="空间统计">
+            <div class="storage-metric">
+              <span>当前镜像空间</span>
+              <strong id="repoStorageText">请选择镜像</strong>
+              <small id="repoStorageMeta">从左侧选择一个镜像</small>
+              <button class="mini-btn" id="refreshRepoStorageButton" type="button" disabled>计算当前镜像</button>
+            </div>
+          </section>
+
+          <div class="content-grid">
+            <section class="panel repository-panel">
+              <div class="panel-head">
+                <div>
+                  <h2>镜像列表</h2>
+                  <span id="repoCount">0 repositories</span>
+                </div>
+                <input class="search-input" id="repoSearch" type="search" placeholder="搜索镜像" />
+              </div>
+              <form class="direct-repo-form" id="directRepoForm">
+                <input id="directRepoInput" type="text" placeholder="手动输入镜像名，如 library/alpine" />
+                <button class="tool-btn" type="submit">打开</button>
+              </form>
+              <div class="repo-list" id="repoList"></div>
+              <button class="ghost-btn full-width" id="loadMoreReposButton" type="button" hidden>加载更多</button>
+            </section>
+
+            <section class="panel detail-panel">
+              <div class="panel-head sticky-head">
+                <div>
+                  <h2 id="selectedRepoTitle">选择一个镜像</h2>
+                  <span id="tagSummary">查看 tag 与 manifest digest</span>
+                </div>
+                <div class="detail-actions">
+                  <button class="danger-btn" id="batchDeleteButton" type="button" disabled>批量删除</button>
+                  <button class="tool-btn" id="refreshTagsButton" type="button" disabled>刷新 tag</button>
+                </div>
+              </div>
+              <div class="empty-state" id="emptyState">
+                <strong>还没有选择镜像</strong>
+                <span>从左侧列表选择一个仓库后，这里会显示 tag 和删除操作。</span>
+              </div>
+              <div class="tag-table-wrap" id="tagTableWrap" hidden>
+                <table class="tag-table">
+                  <thead>
+                    <tr>
+                      <th class="select-col">
+                        <input id="selectAllTagsInput" type="checkbox" aria-label="全选 tag" />
+                      </th>
+                      <th>Tag</th>
+                      <th>大小</th>
+                      <th>Digest</th>
+                      <th>时间</th>
+                      <th class="action-col">操作</th>
+                    </tr>
+                  </thead>
+                  <tbody id="tagTableBody"></tbody>
+                </table>
+                <button class="ghost-btn full-width" id="loadMoreTagsButton" type="button" hidden>加载更多 tag</button>
+              </div>
+            </section>
+          </div>
+        </div>
+      </section>
+    </main>
+    <script src="/static/app.js"></script>
+  </body>
+</html>
