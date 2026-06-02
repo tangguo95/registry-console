@@ -9,6 +9,7 @@
   <img alt="No dependencies" src="https://img.shields.io/badge/Dependencies-zero-087D83?style=for-the-badge" />
   <img alt="Registry API" src="https://img.shields.io/badge/Docker%20Registry-HTTP%20API%20V2-2496ED?style=for-the-badge&logo=docker&logoColor=white" />
   <img alt="Local first" src="https://img.shields.io/badge/Local--first-127.0.0.1-D66B1F?style=for-the-badge" />
+  <a href="LICENSE"><img alt="License MIT" src="https://img.shields.io/badge/License-MIT-green?style=for-the-badge" /></a>
 </p>
 
 一个零第三方依赖的 Python Web 管理台，用于连接兼容 Docker Registry HTTP API V2 的远程镜像仓库。它适合在本机或内网临时管理 Registry：查看镜像、统计 tag、查看 digest/大小/时间，并执行单个或批量删除。
@@ -200,6 +201,15 @@ Docker Registry 删除 manifest 后，通常还需要仓库侧执行 garbage col
 - 默认建议只监听 `127.0.0.1`。
 - 如果给多人使用，建议放在内网，并增加 HTTPS、用户鉴权、审计日志和 CSRF 防护。
 - 登录凭据只保存在当前 Python 进程内存中，不会写入本地文件。
+
+## Contact
+
+- Author: tangguo95
+- Email: 545496535@qq.com
+
+## License
+
+This project is released under the [MIT License](LICENSE).
 
 ## References
 
