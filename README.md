@@ -12,35 +12,40 @@
   <a href="LICENSE"><img alt="License MIT" src="https://img.shields.io/badge/License-MIT-green?style=for-the-badge" /></a>
 </p>
 
-一个零第三方依赖的 Python Web 管理台，用于连接兼容 Docker Registry HTTP API V2 的远程镜像仓库。它适合在本机或内网临时管理 Registry：查看镜像、统计 tag、查看 digest/大小/时间，并执行单个或批量删除。
+<p align="center">
+  <strong>English</strong> | <a href="README_ZH.md">中文</a>
+</p>
+
+A zero-dependency Python web console for managing Docker Registry HTTP API V2 compatible remote image registries. It is designed for local or intranet use: browse repositories, inspect tags, view digest/size/time metadata, estimate per-repository image usage, and delete tags individually or in batches.
 
 ## Preview
 
-### 登录页
+### Login
 
 ![Login view](docs/images/login.jpg)
 
-### 管理台
+### Dashboard
 
 ![Dashboard view](docs/images/dashboard.jpg)
 
 ## Highlights
 
-- 零第三方 Python 依赖，下载后即可运行。
-- 支持匿名仓库、Basic Auth、Bearer token challenge。
-- 支持登录时或登录后切换仓库前缀/命名空间。
-- 左侧镜像列表异步展示每个镜像下的 tag 数。
-- 右侧 tag 列表自动补充大小、digest、时间，并按可读取到的更新时间倒序排列。
-- 当前镜像空间按唯一 blob digest 去重估算，多 tag 共享层只计算一次。
-- 支持单 tag 删除和批量删除。
+- Zero third-party Python dependencies.
+- Supports anonymous registries, Basic Auth, and Bearer token challenge.
+- Supports repository prefix/namespace filtering during login or after login.
+- Shows async tag counts beside each repository in the repository list.
+- Auto-loads tag size, digest, and time metadata.
+- Sorts tags by the readable update time in descending order.
+- Estimates current repository usage by unique blob digest, so shared layers across tags are counted once.
+- Supports single-tag deletion and batch deletion.
 
 ## Requirements
 
 - Python 3.10+
-- 运行机器可以访问目标 Docker Registry
-- 目标 Registry 兼容 Docker Registry HTTP API V2
+- Network access from the running machine to the target Docker Registry
+- A target registry compatible with Docker Registry HTTP API V2
 
-不需要安装 Python 第三方依赖。
+No Python package installation is required.
 
 ## Quick Start
 
@@ -50,62 +55,62 @@ cd registry-console
 python3 app.py
 ```
 
-默认访问地址：
+Default URL:
 
 ```text
 http://127.0.0.1:8765
 ```
 
-打开浏览器后填写：
+Open the URL in a browser and fill in:
 
-- 仓库地址：例如 `https://registry.example.com`
-- 用户名：匿名仓库可留空
-- 密码：匿名仓库可留空
-- 仓库前缀：可选，例如 `project-a/team-b`
+- Registry URL: for example `https://registry.example.com`
+- Username: optional for anonymous registries
+- Password: optional for anonymous registries
+- Repository prefix: optional, for example `project-a/team-b`
 
 ## Run Options
 
-默认监听本机：
+Listen on localhost:
 
 ```bash
 python3 app.py --host 127.0.0.1 --port 8765
 ```
 
-如果需要让局域网其他机器访问：
+Listen on all interfaces for LAN access:
 
 ```bash
 python3 app.py --host 0.0.0.0 --port 8765
 ```
 
-然后通过服务器 IP 访问：
+Then visit:
 
 ```text
-http://服务器IP:8765
+http://SERVER_IP:8765
 ```
 
-对外开放时建议加反向代理、HTTPS 和访问鉴权。
+If you expose it beyond your own machine, use a reverse proxy, HTTPS, and proper access control.
 
 ## Background Run
 
-简单后台运行：
+Run with `nohup`:
 
 ```bash
 nohup python3 app.py --host 127.0.0.1 --port 8765 > docker_remote_manage.log 2>&1 &
 ```
 
-查看进程：
+Find the process:
 
 ```bash
 lsof -nP -iTCP:8765 -sTCP:LISTEN
 ```
 
-停止服务：
+Stop it:
 
 ```bash
 kill <PID>
 ```
 
-macOS 可以用 `launchctl` 临时托管：
+On macOS, you can temporarily manage it with `launchctl`:
 
 ```bash
 launchctl submit -l registry_console \
@@ -114,7 +119,7 @@ launchctl submit -l registry_console \
   -- /bin/zsh -lc 'cd /path/to/registry-console && python3 app.py --host 127.0.0.1 --port 8765'
 ```
 
-停止：
+Stop it:
 
 ```bash
 launchctl remove registry_console
@@ -122,13 +127,13 @@ launchctl remove registry_console
 
 ## Usage
 
-1. 打开 `http://127.0.0.1:8765`。
-2. 输入 Registry 地址、用户名、密码。
-3. 可选填写仓库前缀，限制只展示某个项目/命名空间下的镜像。
-4. 登录后从左侧选择镜像。
-5. 右侧查看 tag、大小、digest、时间。
-6. 勾选多个 tag 后可批量删除。
-7. 顶部“当前镜像空间”会估算当前镜像的唯一 blob 占用。
+1. Open `http://127.0.0.1:8765`.
+2. Enter the Registry URL, username, and password.
+3. Optionally set a repository prefix to limit the visible repositories.
+4. Select a repository from the left panel.
+5. Inspect tags, size, digest, and time metadata on the right.
+6. Select multiple tags to delete them in a batch.
+7. Use the current repository usage panel to estimate unique blob usage for the selected repository.
 
 ## Project Structure
 
@@ -136,6 +141,7 @@ launchctl remove registry_console
 registry-console/
 ├── app.py
 ├── README.md
+├── README_ZH.md
 ├── docs/
 │   └── images/
 │       ├── dashboard.jpg
@@ -146,11 +152,11 @@ registry-console/
     └── styles.css
 ```
 
-`app.py` 是后端 HTTP 服务和 Registry API 调用逻辑，`static/` 是前端页面，`docs/images/` 是 README 预览图。
+`app.py` contains the HTTP server and Registry API integration. `static/` contains the frontend. `docs/images/` contains README preview images.
 
 ## API Coverage
 
-当前主要使用这些 Registry V2 API：
+The tool mainly uses these Registry V2 APIs:
 
 - `GET /v2/`
 - `GET /v2/_catalog`
@@ -161,46 +167,46 @@ registry-console/
 
 ## FAQ
 
-### 端口被占用
+### The port is already in use
 
 ```bash
 lsof -nP -iTCP:8765 -sTCP:LISTEN
 python3 app.py --port 8766
 ```
 
-### 服务重启后为什么需要重新登录
+### Why do I need to log in again after restarting the service?
 
-登录凭据只保存在当前 Python 进程的内存 session 中。服务重启后需要重新登录。
+Credentials are stored only in the current Python process memory session. Restarting the service clears the session.
 
-### 密码里有特殊符号怎么办
+### What if the password contains special characters?
 
-页面输入密码不需要额外转义。
+Passwords entered in the web page do not need escaping.
 
-如果用 Docker CLI 测试，密码包含 `!`、`@`、`%` 等字符时，建议使用：
+If you test with Docker CLI and the password contains characters such as `!`, `@`, or `%`, prefer:
 
 ```bash
-printf '%s' '你的密码' | docker login registry.example.com -u '用户名' --password-stdin
+printf '%s' 'your-password' | docker login registry.example.com -u 'username' --password-stdin
 ```
 
-不要直接把带特殊符号的密码裸写在 `-p` 后面，zsh 可能会做历史展开。
+Do not pass such passwords directly after `-p` in zsh, because shell history expansion may interfere.
 
-### 删除后空间为什么没有马上释放
+### Why is storage not released immediately after deletion?
 
-Docker Registry 删除 manifest 后，通常还需要仓库侧执行 garbage collection 才会真正释放存储空间。
+Deleting a manifest from Docker Registry usually only removes the reference. The registry often needs garbage collection before storage is actually released.
 
-### 空间统计和真实磁盘占用为什么不完全一致
+### Why is the usage estimate different from real disk usage?
 
-空间统计基于 Registry V2 API 可读取到的 manifest/config/layers descriptor 估算，不等同于仓库后端文件系统实际占用。Registry V2 标准接口也不提供服务器总容量/剩余容量。
+The usage estimate is based on manifest/config/layer descriptors readable from Registry V2 API. It is not the same as backend filesystem usage. Registry V2 also does not provide total capacity or remaining capacity.
 
-### 上传时间为什么不一定准确
+### Why is the upload time not always accurate?
 
-标准 Registry V2 API 通常不提供准确的推送时间。本工具优先显示 manifest 响应头 `Last-Modified`，否则读取 image config 的 `created` 作为参考时间。
+Docker Registry V2 usually does not provide an exact push time. This tool prefers the manifest response header `Last-Modified`, and falls back to the image config `created` field.
 
 ## Security Notes
 
-- 默认建议只监听 `127.0.0.1`。
-- 如果给多人使用，建议放在内网，并增加 HTTPS、用户鉴权、审计日志和 CSRF 防护。
-- 登录凭据只保存在当前 Python 进程内存中，不会写入本地文件。
+- Listening on `127.0.0.1` is recommended by default.
+- For team use, put it inside an intranet and add HTTPS, authentication, audit logging, and CSRF protection.
+- Login credentials are stored only in the current Python process memory and are not written to local files.
 
 ## AI-Assisted Development
 
