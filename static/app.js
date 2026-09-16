@@ -26,9 +26,11 @@ const els = {
   dashboardView: document.querySelector("#dashboardView"),
   loginForm: document.querySelector("#loginForm"),
   registryInput: document.querySelector("#registryInput"),
+  registryHistoryList: document.querySelector("#registryHistoryList"),
   usernameInput: document.querySelector("#usernameInput"),
   passwordInput: document.querySelector("#passwordInput"),
   repositoryPrefixInput: document.querySelector("#repositoryPrefixInput"),
+  repositoryPrefixHistoryList: document.querySelector("#repositoryPrefixHistoryList"),
   insecureInput: document.querySelector("#insecureInput"),
   loginButton: document.querySelector("#loginButton"),
   loginMessage: document.querySelector("#loginMessage"),
@@ -64,8 +66,11 @@ const els = {
 
 const THEME_STORAGE_KEY = "docker-remote-manage.theme";
 const THEME_MODES = new Set(["light", "dark", "system"]);
+const CONNECTION_HISTORY_STORAGE_KEY = "docker-remote-manage.connection-history";
+const CONNECTION_HISTORY_LIMIT = 10;
 const systemThemeQuery = window.matchMedia?.("(prefers-color-scheme: dark)");
 let selectedThemeMode = "system";
+let connectionHistory = [];
 
 function applyTheme(mode, persist = true) {
   selectedThemeMode = THEME_MODES.has(mode) ? mode : "system";
@@ -96,6 +101,80 @@ function initTheme() {
     if (selectedThemeMode === "system") applyTheme("system", false);
   });
   applyTheme(initialMode, false);
+}
+
+function renderConnectionHistory(registry = els.registryInput.value.trim()) {
+  const registries = [...new Set(connectionHistory.map((item) => item.registry))];
+  els.registryHistoryList.innerHTML = registries
+    .map((value) => `<option value="${escapeHtml(value)}"></option>`)
+    .join("");
+
+  const prefixes = [
+    ...new Set(
+      connectionHistory
+        .filter((item) => !registry || item.registry === registry)
+        .map((item) => item.repositoryPrefix)
+        .filter(Boolean),
+    ),
+  ];
+  els.repositoryPrefixHistoryList.innerHTML = prefixes
+    .map((value) => `<option value="${escapeHtml(value)}"></option>`)
+    .join("");
+}
+
+function initConnectionHistory() {
+  try {
+    const saved = JSON.parse(localStorage.getItem(CONNECTION_HISTORY_STORAGE_KEY) || "[]");
+    if (Array.isArray(saved)) {
+      connectionHistory = saved
+        .filter(
+          (item) =>
+            item &&
+            typeof item.registry === "string" &&
+            item.registry.trim() &&
+            typeof item.repositoryPrefix === "string",
+        )
+        .map((item) => ({
+          registry: item.registry.trim(),
+          repositoryPrefix: normalizeRepositoryPrefix(item.repositoryPrefix),
+        }))
+        .slice(0, CONNECTION_HISTORY_LIMIT);
+    }
+  } catch {
+    connectionHistory = [];
+  }
+
+  const latest = connectionHistory[0];
+  if (latest && !els.registryInput.value) {
+    els.registryInput.value = latest.registry;
+    els.repositoryPrefixInput.value = latest.repositoryPrefix;
+  }
+  renderConnectionHistory(latest?.registry || "");
+  els.registryInput.addEventListener("change", () => {
+    const registry = els.registryInput.value.trim();
+    const remembered = connectionHistory.find((item) => item.registry === registry);
+    els.repositoryPrefixInput.value = remembered?.repositoryPrefix || "";
+    renderConnectionHistory(registry);
+  });
+}
+
+function rememberSuccessfulConnection(connection) {
+  const registry = String(connection?.registry || "").trim();
+  if (!registry) return;
+  const repositoryPrefix = normalizeRepositoryPrefix(connection?.repositoryPrefix || "");
+  connectionHistory = [
+    { registry, repositoryPrefix },
+    ...connectionHistory.filter(
+      (item) => item.registry !== registry || item.repositoryPrefix !== repositoryPrefix,
+    ),
+  ].slice(0, CONNECTION_HISTORY_LIMIT);
+  try {
+    // 只保存非敏感的连接定位信息，不保存用户名、密码和证书选项。
+    localStorage.setItem(CONNECTION_HISTORY_STORAGE_KEY, JSON.stringify(connectionHistory));
+  } catch {}
+  els.registryInput.value = registry;
+  els.repositoryPrefixInput.value = repositoryPrefix;
+  renderConnectionHistory(registry);
 }
 
 async function api(path, options = {}) {
@@ -526,6 +605,7 @@ async function login(event) {
         insecure: els.insecureInput.checked,
       }),
     });
+    rememberSuccessfulConnection(payload.connection);
     updateConnection(payload.connection);
     switchView(true);
     await loadCatalog(true);
@@ -952,4 +1032,5 @@ els.directRepoForm.addEventListener("submit", (event) => {
 });
 
 initTheme();
+initConnectionHistory();
 boot();

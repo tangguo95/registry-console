@@ -59,7 +59,8 @@
           </div>
           <label>
             <span>仓库地址</span>
-            <input id="registryInput" name="registry" type="text" autocomplete="url" placeholder="https://registry.example.com" required />
+            <input id="registryInput" name="registry" type="text" list="registryHistoryList" autocomplete="url" placeholder="https://registry.example.com" required />
+            <datalist id="registryHistoryList"></datalist>
           </label>
           <label>
             <span>用户名</span>
@@ -71,7 +72,8 @@
           </label>
           <label>
             <span>仓库前缀</span>
-            <input id="repositoryPrefixInput" name="repositoryPrefix" type="text" placeholder="可选，如 project-a/team-b" />
+            <input id="repositoryPrefixInput" name="repositoryPrefix" type="text" list="repositoryPrefixHistoryList" placeholder="可选，如 project-a/team-b" />
+            <datalist id="repositoryPrefixHistoryList"></datalist>
           </label>
           <label class="check-row">
             <input id="insecureInput" name="insecure" type="checkbox" />
