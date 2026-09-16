@@ -222,6 +222,18 @@ class RegistryClient:
             "distributionVersion": headers.get("Docker-Distribution-Api-Version"),
         }
 
+    def validate_repository_selection(self) -> None:
+        # 登录前确认当前账号能看到至少一个匹配镜像，避免进入空管理台。
+        catalog = self.catalog(limit=1)
+        if catalog["repositories"]:
+            return
+        if self.repository_prefix:
+            raise RegistryError(
+                404,
+                f"未找到仓库前缀“{self.repository_prefix}”，请检查名称或账号权限",
+            )
+        raise RegistryError(404, "当前仓库没有可访问的镜像，请检查仓库地址或账号权限")
+
     def catalog(self, limit: int, last: str | None = None) -> dict[str, Any]:
         repositories: list[str] = []
         next_last = last
@@ -1016,6 +1028,7 @@ class AppHandler(BaseHTTPRequestHandler):
             repository_prefix=str(data.get("repositoryPrefix") or ""),
         )
         ping = client.ping()
+        client.validate_repository_selection()
 
         self._cleanup_sessions()
         session_id = secrets.token_urlsafe(32)

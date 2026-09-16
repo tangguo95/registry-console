@@ -8,6 +8,8 @@ const state = {
   tagCountGeneration: 0,
   tags: [],
   tagNextLast: null,
+  // 仅缓存已经完整整理过的 tag 快照，用户点击“刷新 tag”时才覆盖。
+  tagCacheByRepo: new Map(),
   metadataByTag: new Map(),
   loadingMetadataTags: new Set(),
   metadataGeneration: 0,
@@ -102,10 +104,23 @@ function setRepoListLoading(message) {
   els.repoList.innerHTML = `<div class="loading-state"><span></span><strong>${message}</strong></div>`;
 }
 
-function setTagListLoading(message) {
+function setTagListLoading(message, detail = "") {
   els.emptyState.hidden = true;
   els.tagTableWrap.hidden = false;
-  els.tagTableBody.innerHTML = `<tr><td colspan="6"><div class="loading-state inline"><span></span><strong>${message}</strong></div></td></tr>`;
+  els.loadMoreTagsButton.hidden = true;
+  els.selectAllTagsInput.disabled = true;
+  els.batchDeleteButton.disabled = true;
+  els.tagTableBody.innerHTML = `
+    <tr>
+      <td colspan="6">
+        <div class="loading-state inline" role="status">
+          <span aria-hidden="true"></span>
+          <strong>${escapeHtml(message)}</strong>
+          ${detail ? `<small>${escapeHtml(detail)}</small>` : ""}
+        </div>
+      </td>
+    </tr>
+  `;
 }
 
 function switchView(authenticated) {
@@ -140,6 +155,24 @@ function updateConnection(connection) {
   els.scopeInput.value = state.repositoryPrefix;
   updateDirectRepoPlaceholder();
   renderStorageSummary();
+}
+
+function cacheSelectedRepositoryTags() {
+  if (!state.selectedRepo) return;
+  state.tagCacheByRepo.set(state.selectedRepo, {
+    tags: [...state.tags],
+    tagNextLast: state.tagNextLast,
+    metadataByTag: new Map(state.metadataByTag),
+  });
+}
+
+function restoreRepositoryTagCache(repo) {
+  const cached = state.tagCacheByRepo.get(repo);
+  if (!cached) return false;
+  state.tags = [...cached.tags];
+  state.tagNextLast = cached.tagNextLast;
+  state.metadataByTag = new Map(cached.metadataByTag);
+  return true;
 }
 
 function filteredRepositories() {
@@ -209,13 +242,48 @@ function loadTagCountsForRepositories(repositories) {
         if (generation !== state.tagCountGeneration) return;
         state.tagCountByRepo.set(repo, { error: true, countText: "?" });
       } finally {
-        state.loadingTagCountRepos.delete(repo);
-        if (generation === state.tagCountGeneration) renderRepositories();
+        if (generation === state.tagCountGeneration) {
+          state.loadingTagCountRepos.delete(repo);
+          renderRepositories();
+        }
       }
     }
   });
 
   Promise.all(workers).catch(() => null);
+}
+
+async function refreshRepositoryTagCount(repo) {
+  const generation = state.tagCountGeneration;
+  state.loadingTagCountRepos.add(repo);
+  renderRepositories();
+  try {
+    const payload = await api(`/api/repositories/${encodeURIComponent(repo)}/tags/count?maxPages=20`);
+    if (generation !== state.tagCountGeneration) return;
+    state.tagCountByRepo.set(repo, payload);
+  } catch {
+    if (generation !== state.tagCountGeneration) return;
+    state.tagCountByRepo.set(repo, { error: true, countText: "?" });
+  } finally {
+    if (generation === state.tagCountGeneration) {
+      state.loadingTagCountRepos.delete(repo);
+      renderRepositories();
+    }
+  }
+}
+
+function updateRepositoryTagCountAfterDelete(repo, deletedCount) {
+  const current = state.tagCountByRepo.get(repo);
+  // 先展示删除后的数量，再取消旧计数请求并回查，避免迟到响应覆盖新值。
+  state.tagCountGeneration += 1;
+  state.loadingTagCountRepos.clear();
+  if (Number.isInteger(current?.tagCount) && !current.hasMore) {
+    const tagCount = Math.max(0, current.tagCount - deletedCount);
+    state.tagCountByRepo.set(repo, { ...current, tagCount, countText: String(tagCount) });
+  } else {
+    state.tagCountByRepo.delete(repo);
+  }
+  refreshRepositoryTagCount(repo).catch(() => null);
 }
 
 function renderTags() {
@@ -451,6 +519,7 @@ function resetWorkspaceState() {
   state.tagCountGeneration += 1;
   state.tags = [];
   state.tagNextLast = null;
+  state.tagCacheByRepo.clear();
   state.metadataByTag.clear();
   state.loadingMetadataTags.clear();
   state.metadataGeneration += 1;
@@ -530,17 +599,27 @@ async function selectRepository(repo) {
   state.selectedTags.clear();
   state.repoStorageLoading = false;
   state.repoStorageGeneration += 1;
+  const restoredFromCache = restoreRepositoryTagCache(repo);
   renderRepositories();
   renderTags();
-  await loadTags(true);
+  if (restoredFromCache) {
+    showNotice(`已从缓存恢复 ${state.tags.length} 个 tag，如需更新请点击“刷新 tag”。`, "success");
+    if (!state.repoStorageByRepo.has(repo)) loadRepositoryStorage(repo);
+    return;
+  }
+  const tagLoad = loadTags(true);
   loadRepositoryStorage(repo);
+  await tagLoad;
 }
 
 async function loadTags(reset = false) {
   if (!state.selectedRepo) return;
-  setBusy(els.refreshTagsButton, true, "读取中");
-  showNotice(`正在读取 ${state.selectedRepo} 的 tag 列表。`, "loading");
+  const repoAtStart = state.selectedRepo;
+  const activeButton = reset ? els.refreshTagsButton : els.loadMoreTagsButton;
+  setBusy(activeButton, true, reset ? "读取中" : "加载中");
+  showNotice(`正在读取 ${repoAtStart} 的 tag 列表。`, "loading");
   if (reset) {
+    setBusy(els.loadMoreTagsButton, false);
     state.tagNextLast = null;
     state.metadataByTag.clear();
     state.loadingMetadataTags.clear();
@@ -549,23 +628,33 @@ async function loadTags(reset = false) {
     renderStorageSummary();
     setTagListLoading("正在读取 tag 列表");
   }
+  const generation = state.metadataGeneration;
   try {
     const last = reset ? "" : state.tagNextLast;
-    const repo = encodeURIComponent(state.selectedRepo);
+    const repo = encodeURIComponent(repoAtStart);
     const url = new URL(`/api/repositories/${repo}/tags`, window.location.origin);
     url.searchParams.set("limit", "100");
     if (last) url.searchParams.set("last", last);
     const payload = await api(`${url.pathname}${url.search}`);
+    if (state.selectedRepo !== repoAtStart || generation !== state.metadataGeneration) return;
     state.tags = reset ? payload.tags : [...state.tags, ...payload.tags];
     state.selectedTags = new Set([...state.selectedTags].filter((tag) => state.tags.includes(tag)));
     state.tagNextLast = payload.nextLast || null;
-    renderTags();
-    showNotice(`已读取 ${state.tags.length} 个 tag，正在补充大小、digest 和时间。`, "loading");
-    loadMetadataBatch();
+    if (!state.tags.length) {
+      cacheSelectedRepositoryTags();
+      renderTags();
+      showNotice("该镜像没有可显示的 tag。", "success");
+      return;
+    }
+    await loadMetadataBatch();
   } catch (error) {
-    showNotice(error.message, "error");
+    if (state.selectedRepo === repoAtStart && generation === state.metadataGeneration) {
+      showNotice(error.message, "error");
+    }
   } finally {
-    setBusy(els.refreshTagsButton, false);
+    if (state.selectedRepo === repoAtStart && generation === state.metadataGeneration) {
+      setBusy(activeButton, false);
+    }
   }
 }
 
@@ -596,6 +685,7 @@ async function loadMetadata(tag, button) {
     if (state.selectedRepo === repoAtStart && generation === state.metadataGeneration) {
       state.loadingMetadataTags.delete(tag);
       setBusy(button, false);
+      cacheSelectedRepositoryTags();
       renderTags();
     }
   }
@@ -608,13 +698,20 @@ async function loadMetadataBatch(limit = Number.POSITIVE_INFINITY) {
     .filter((tag) => !state.metadataByTag.has(tag) && !state.loadingMetadataTags.has(tag))
     .slice(0, limit);
   if (!repoAtStart || !candidates.length) {
+    cacheSelectedRepositoryTags();
+    renderTags();
     return;
   }
 
   candidates.forEach((tag) => state.loadingMetadataTags.add(tag));
-  renderTags();
   let completed = 0;
   const total = candidates.length;
+  els.tagSummary.textContent = `${state.tags.length} tags，正在整理详情 0/${total}`;
+  setTagListLoading(
+    `正在整理 ${state.tags.length} 个 tag`,
+    `详情 0/${total} · 完成后统一按时间展示，列表不会跳动`,
+  );
+  showNotice(`正在查询 ${total} 个 tag 的大小、digest 和时间。`, "loading");
   const workers = Array.from({ length: Math.min(4, candidates.length) }, async () => {
     while (candidates.length && state.selectedRepo === repoAtStart && generation === state.metadataGeneration) {
       const tag = candidates.shift();
@@ -622,16 +719,22 @@ async function loadMetadataBatch(limit = Number.POSITIVE_INFINITY) {
         const repo = encodeURIComponent(repoAtStart);
         const encodedTag = encodeURIComponent(tag);
         const payload = await api(`/api/repositories/${repo}/tags/${encodedTag}/manifest`);
-        state.metadataByTag.set(tag, payload);
+        if (state.selectedRepo === repoAtStart && generation === state.metadataGeneration) {
+          state.metadataByTag.set(tag, payload);
+        }
       } catch {
-        state.metadataByTag.set(tag, { error: true, timeNote: "详情读取失败" });
+        if (state.selectedRepo === repoAtStart && generation === state.metadataGeneration) {
+          state.metadataByTag.set(tag, { error: true, timeNote: "详情读取失败" });
+        }
       } finally {
         if (state.selectedRepo === repoAtStart && generation === state.metadataGeneration) {
           state.loadingMetadataTags.delete(tag);
           completed += 1;
-          if (completed === total || completed % 5 === 0) {
-            renderTags();
-          }
+          els.tagSummary.textContent = `${state.tags.length} tags，正在整理详情 ${completed}/${total}`;
+          setTagListLoading(
+            `正在整理 ${state.tags.length} 个 tag`,
+            `详情 ${completed}/${total} · 完成后统一按时间展示，列表不会跳动`,
+          );
         }
       }
     }
@@ -639,6 +742,7 @@ async function loadMetadataBatch(limit = Number.POSITIVE_INFINITY) {
 
   await Promise.all(workers);
   if (state.selectedRepo === repoAtStart && generation === state.metadataGeneration) {
+    cacheSelectedRepositoryTags();
     renderTags();
     showNotice(`已补充 ${completed} 个 tag 的大小、digest 和时间。`, "success");
   }
@@ -679,30 +783,45 @@ async function loadRepositoryStorage(repo = state.selectedRepo, manual = false) 
   }
 }
 
-function invalidateStorageAfterDelete() {
-  if (state.selectedRepo) {
-    state.repoStorageByRepo.delete(state.selectedRepo);
+function removeTagFromRepositoryState(repo, tag) {
+  if (state.selectedRepo === repo) {
+    state.tags = state.tags.filter((item) => item !== tag);
+    state.metadataByTag.delete(tag);
+    state.loadingMetadataTags.delete(tag);
+    state.selectedTags.delete(tag);
+    cacheSelectedRepositoryTags();
+    return true;
   }
+
+  const cached = state.tagCacheByRepo.get(repo);
+  if (cached) {
+    cached.tags = cached.tags.filter((item) => item !== tag);
+    cached.metadataByTag.delete(tag);
+  }
+  return false;
+}
+
+function invalidateStorageAfterDelete(repo) {
+  state.repoStorageByRepo.delete(repo);
   renderStorageSummary();
 }
 
 async function deleteTag(tag, button) {
   if (!state.selectedRepo) return;
-  const confirmed = window.confirm(`确认删除 ${state.selectedRepo}:${tag} 吗？`);
+  const repoAtStart = state.selectedRepo;
+  const confirmed = window.confirm(`确认删除 ${repoAtStart}:${tag} 吗？`);
   if (!confirmed) return;
 
   setBusy(button, true, "删除中");
   showNotice("");
   try {
-    const repo = encodeURIComponent(state.selectedRepo);
+    const repo = encodeURIComponent(repoAtStart);
     const encodedTag = encodeURIComponent(tag);
     const payload = await api(`/api/repositories/${repo}/tags/${encodedTag}`, { method: "DELETE" });
-    state.tags = state.tags.filter((item) => item !== tag);
-    state.metadataByTag.delete(tag);
-    state.loadingMetadataTags.delete(tag);
-    state.selectedTags.delete(tag);
-    invalidateStorageAfterDelete();
-    renderTags();
+    const removedFromCurrentRepo = removeTagFromRepositoryState(repoAtStart, tag);
+    invalidateStorageAfterDelete(repoAtStart);
+    updateRepositoryTagCountAfterDelete(repoAtStart, 1);
+    if (removedFromCurrentRepo) renderTags();
     showNotice(`已删除 ${payload.repository}:${payload.tag}，digest ${payload.digest}`, "success");
   } catch (error) {
     showNotice(error.message, "error");
@@ -713,10 +832,11 @@ async function deleteTag(tag, button) {
 
 async function deleteSelectedTags() {
   if (!state.selectedRepo) return;
+  const repoAtStart = state.selectedRepo;
   const tagsToDelete = currentSelectedTags();
   if (!tagsToDelete.length) return;
 
-  const confirmed = window.confirm(`确认删除 ${state.selectedRepo} 下选中的 ${tagsToDelete.length} 个 tag 吗？`);
+  const confirmed = window.confirm(`确认删除 ${repoAtStart} 下选中的 ${tagsToDelete.length} 个 tag 吗？`);
   if (!confirmed) return;
 
   state.batchDeleting = true;
@@ -724,23 +844,22 @@ async function deleteSelectedTags() {
   const failures = [];
   let successCount = 0;
   for (const tag of tagsToDelete) {
-    showNotice(`正在删除 ${state.selectedRepo}:${tag}（${successCount + failures.length + 1}/${tagsToDelete.length}）。`, "loading");
+    showNotice(`正在删除 ${repoAtStart}:${tag}（${successCount + failures.length + 1}/${tagsToDelete.length}）。`, "loading");
     try {
-      const repo = encodeURIComponent(state.selectedRepo);
+      const repo = encodeURIComponent(repoAtStart);
       const encodedTag = encodeURIComponent(tag);
       await api(`/api/repositories/${repo}/tags/${encodedTag}`, { method: "DELETE" });
       successCount += 1;
-      state.tags = state.tags.filter((item) => item !== tag);
-      state.metadataByTag.delete(tag);
-      state.loadingMetadataTags.delete(tag);
-      state.selectedTags.delete(tag);
-      invalidateStorageAfterDelete();
-      renderTags();
+      if (removeTagFromRepositoryState(repoAtStart, tag)) renderTags();
     } catch (error) {
       failures.push({ tag, message: error.message });
     }
   }
 
+  if (successCount) {
+    invalidateStorageAfterDelete(repoAtStart);
+    updateRepositoryTagCountAfterDelete(repoAtStart, successCount);
+  }
   state.batchDeleting = false;
   setBusy(els.batchDeleteButton, false);
   renderTags();
@@ -779,8 +898,10 @@ els.clearScopeButton.addEventListener("click", () => {
 });
 els.refreshCatalogButton.addEventListener("click", () => loadCatalog(true));
 els.refreshTagsButton.addEventListener("click", async () => {
-  await loadTags(true);
-  loadRepositoryStorage(state.selectedRepo);
+  const repo = state.selectedRepo;
+  const tagLoad = loadTags(true);
+  loadRepositoryStorage(repo);
+  await tagLoad;
 });
 els.batchDeleteButton.addEventListener("click", deleteSelectedTags);
 els.selectAllTagsInput.addEventListener("change", (event) => toggleAllTagSelection(event.currentTarget.checked));

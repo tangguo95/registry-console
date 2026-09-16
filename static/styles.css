@@ -654,6 +654,14 @@ input:focus {
   min-height: 70px;
 }
 
+.loading-state small {
+  color: var(--ink-soft);
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.5;
+  text-align: center;
+}
+
 .loading-state span {
   width: 28px;
   height: 28px;
