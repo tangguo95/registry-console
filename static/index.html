@@ -3,8 +3,25 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#f7f9fb" />
     <title>Docker 远程镜像仓库管理</title>
     <link rel="icon" href="/static/favicon.svg" type="image/svg+xml" />
+    <script>
+      (() => {
+        const storageKey = "docker-remote-manage.theme";
+        let mode = "system";
+        try {
+          const saved = localStorage.getItem(storageKey);
+          if (["light", "dark", "system"].includes(saved)) mode = saved;
+        } catch {}
+        const dark =
+          mode === "dark" ||
+          (mode === "system" && window.matchMedia?.("(prefers-color-scheme: dark)").matches);
+        document.documentElement.dataset.themeMode = mode;
+        document.documentElement.dataset.theme = dark ? "dark" : "light";
+        document.querySelector('meta[name="theme-color"]').content = dark ? "#101a29" : "#f7f9fb";
+      })();
+    </script>
     <link rel="stylesheet" href="/static/styles.css" />
   </head>
   <body>
@@ -21,8 +38,24 @@
 
         <form class="login-card" id="loginForm">
           <div class="form-head">
-            <p class="eyebrow">Connection</p>
-            <h2>连接仓库</h2>
+            <div>
+              <p class="eyebrow">Connection</p>
+              <h2>连接仓库</h2>
+            </div>
+            <div class="theme-switcher" role="group" aria-label="显示主题">
+              <button type="button" data-theme-value="light" title="浅色" aria-label="使用浅色主题">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4"></circle><path d="M12 2v2M12 20v2M4.93 4.93l1.42 1.42M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.42-1.42M17.66 6.34l1.41-1.41"></path></svg>
+                <span>浅色</span>
+              </button>
+              <button type="button" data-theme-value="dark" title="深色" aria-label="使用深色主题">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20.3 15.5A8.5 8.5 0 0 1 8.5 3.7 8.5 8.5 0 1 0 20.3 15.5Z"></path></svg>
+                <span>深色</span>
+              </button>
+              <button type="button" data-theme-value="system" title="跟随系统" aria-label="跟随系统主题">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="13" rx="2"></rect><path d="M8 21h8M12 17v4"></path></svg>
+                <span>系统</span>
+              </button>
+            </div>
           </div>
           <label>
             <span>仓库地址</span>
@@ -81,6 +114,20 @@
               <h1>镜像仓库</h1>
             </div>
             <div class="toolbar">
+              <div class="theme-switcher" role="group" aria-label="显示主题">
+                <button type="button" data-theme-value="light" title="浅色" aria-label="使用浅色主题">
+                  <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4"></circle><path d="M12 2v2M12 20v2M4.93 4.93l1.42 1.42M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.42-1.42M17.66 6.34l1.41-1.41"></path></svg>
+                  <span>浅色</span>
+                </button>
+                <button type="button" data-theme-value="dark" title="深色" aria-label="使用深色主题">
+                  <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20.3 15.5A8.5 8.5 0 0 1 8.5 3.7 8.5 8.5 0 1 0 20.3 15.5Z"></path></svg>
+                  <span>深色</span>
+                </button>
+                <button type="button" data-theme-value="system" title="跟随系统" aria-label="跟随系统主题">
+                  <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="13" rx="2"></rect><path d="M8 21h8M12 17v4"></path></svg>
+                  <span>系统</span>
+                </button>
+              </div>
               <button class="tool-btn" id="refreshCatalogButton" type="button">刷新仓库</button>
             </div>
           </header>

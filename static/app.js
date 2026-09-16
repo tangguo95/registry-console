@@ -62,6 +62,42 @@ const els = {
   loadMoreTagsButton: document.querySelector("#loadMoreTagsButton"),
 };
 
+const THEME_STORAGE_KEY = "docker-remote-manage.theme";
+const THEME_MODES = new Set(["light", "dark", "system"]);
+const systemThemeQuery = window.matchMedia?.("(prefers-color-scheme: dark)");
+let selectedThemeMode = "system";
+
+function applyTheme(mode, persist = true) {
+  selectedThemeMode = THEME_MODES.has(mode) ? mode : "system";
+  const resolvedTheme =
+    selectedThemeMode === "system" ? (systemThemeQuery?.matches ? "dark" : "light") : selectedThemeMode;
+  document.documentElement.dataset.themeMode = selectedThemeMode;
+  document.documentElement.dataset.theme = resolvedTheme;
+  document
+    .querySelector('meta[name="theme-color"]')
+    ?.setAttribute("content", resolvedTheme === "dark" ? "#101a29" : "#f7f9fb");
+  document.querySelectorAll("[data-theme-value]").forEach((button) => {
+    const active = button.dataset.themeValue === selectedThemeMode;
+    button.classList.toggle("is-active", active);
+    button.setAttribute("aria-pressed", String(active));
+  });
+  if (!persist) return;
+  try {
+    localStorage.setItem(THEME_STORAGE_KEY, selectedThemeMode);
+  } catch {}
+}
+
+function initTheme() {
+  const initialMode = document.documentElement.dataset.themeMode || "system";
+  document.querySelectorAll("[data-theme-value]").forEach((button) => {
+    button.addEventListener("click", () => applyTheme(button.dataset.themeValue));
+  });
+  systemThemeQuery?.addEventListener?.("change", () => {
+    if (selectedThemeMode === "system") applyTheme("system", false);
+  });
+  applyTheme(initialMode, false);
+}
+
 async function api(path, options = {}) {
   const response = await fetch(path, {
     credentials: "same-origin",
@@ -915,4 +951,5 @@ els.directRepoForm.addEventListener("submit", (event) => {
   if (repo) selectRepository(repo);
 });
 
+initTheme();
 boot();
